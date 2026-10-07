@@ -63,3 +63,44 @@ if(APPLE)
   target_link_options(HLSSpatialVerify PRIVATE "LINKER:-undefined,dynamic_lookup")
 endif()
 
+#===-- Tests -------------------------------------------------------------===#
+enable_testing()
+
+# Unit tests are a separate executable that does link LLVM and Z3. The pass
+# driver (SpatialVerificationPass.cpp, which owns the cl::opts) is not part of
+# it; the tests exercise the three core modules directly.
+if(LLVM_LINK_LLVM_DYLIB)
+  set(HLS_SV_LLVM_LIBS LLVM)
+else()
+  llvm_map_components_to_libnames(HLS_SV_LLVM_LIBS core support analysis)
+endif()
+
+add_executable(HLSSVUnitTests
+  tests/unit/UnitTests.cpp
+  src/MemoryModel.cpp
+  src/BankPredicate.cpp
+  src/SMTTranslator.cpp)
+target_include_directories(HLSSVUnitTests PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_options(HLSSVUnitTests PRIVATE -fexceptions)
+if(NOT LLVM_ENABLE_RTTI)
+  target_compile_options(HLSSVUnitTests PRIVATE -fno-rtti)
+endif()
+target_link_directories(HLSSVUnitTests PRIVATE ${LLVM_LIBRARY_DIRS})
+target_link_libraries(HLSSVUnitTests PRIVATE ${HLS_SV_LLVM_LIBS} ${HLS_SV_Z3_TARGET})
+add_test(NAME unit COMMAND HLSSVUnitTests)
+
+# lit + FileCheck on the printer output.
+find_program(HLS_SV_FILECHECK NAMES FileCheck FileCheck-${LLVM_VERSION_MAJOR}
+  HINTS ${LLVM_TOOLS_BINARY_DIR} ${LLVM_TOOLS_BINARY_DIR}/../libexec/llvm)
+find_program(HLS_SV_LIT NAMES lit llvm-lit HINTS ${LLVM_TOOLS_BINARY_DIR})
+if(HLS_SV_FILECHECK AND HLS_SV_LIT)
+  set(HLS_SV_PLUGIN_PATH ${CMAKE_CURRENT_BINARY_DIR}/HLSSpatialVerify.so)
+  configure_file(tests/lit/lit.site.cfg.py.in
+                 ${CMAKE_CURRENT_BINARY_DIR}/tests/lit/lit.site.cfg.py @ONLY)
+  add_test(NAME lit
+           COMMAND ${HLS_SV_LIT} -sv ${CMAKE_CURRENT_BINARY_DIR}/tests/lit)
+else()
+  message(WARNING "FileCheck or lit not found; lit tests are not registered "
+                  "(FileCheck='${HLS_SV_FILECHECK}', lit='${HLS_SV_LIT}')")
+endif()
