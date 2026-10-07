@@ -10,12 +10,15 @@
 #include "hls-sv/BankPredicate.h"
 #include "hls-sv/MemoryModel.h"
 #include "hls-sv/SMTTranslator.h"
+#include "hls-sv/SchedulerSignal.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
@@ -379,6 +382,70 @@ void testPermissionMapping() {
   CHECK(paperStatusName(VCStatus::Timeout) == "Tout");
 }
 
+//===----------------------------------------------------------------------===//
+// SchedulerSignal reader
+//===----------------------------------------------------------------------===//
+
+void testScheduleDirectiveReader() {
+  Fixture Fx;
+  LLVMContext &C = Fx.Ctx;
+  IRBuilder<> B(BasicBlock::Create(C, "entry", Fx.F));
+  Type *I32 = B.getInt32Ty();
+  LoadInst *L = B.CreateLoad(I32, Fx.A, "l");
+  Value *Add = B.CreateAdd(Fx.X, Fx.Y, "add");
+  B.CreateRet(Add);
+  auto *AddI = cast<Instruction>(Add);
+
+  auto Str = [&](StringRef S) -> Metadata * { return MDString::get(C, S); };
+  auto Int = [&](unsigned W, uint64_t V) -> Metadata * {
+    return ConstantAsMetadata::get(ConstantInt::get(IntegerType::get(C, W), V));
+  };
+  auto Set = [&](ArrayRef<Metadata *> Ops) {
+    L->setMetadata(kScheduleMDName, MDTuple::get(C, Ops));
+  };
+
+  // No directive: memory instructions default to Sequential, others Parallel.
+  CHECK(!getScheduleDirective(*L));
+  CHECK(effectivePermission(*L) == SchedulePermission::Sequential);
+  CHECK(effectivePermission(*AddI) == SchedulePermission::Parallel);
+
+  Set({Str("parallel"), Int(32, 3)});
+  std::optional<ScheduleDirective> P = getScheduleDirective(*L);
+  CHECK(P && P->Permission == SchedulePermission::Parallel && P->Group == 3);
+  CHECK(P && !P->IssueSlot && !P->Status);
+  CHECK(effectivePermission(*L) == SchedulePermission::Parallel);
+
+  for (VCStatus S : {VCStatus::Refuted, VCStatus::Unknown, VCStatus::Timeout}) {
+    Set({Str("sequential"), Int(32, 1), Int(32, 2), Str(toString(S))});
+    std::optional<ScheduleDirective> D = getScheduleDirective(*L);
+    CHECK(D && D->Permission == SchedulePermission::Sequential);
+    CHECK(D && D->Group == 1 && D->IssueSlot == 2u && D->Status == S);
+    CHECK(effectivePermission(*L) == SchedulePermission::Sequential);
+  }
+
+  // Malformed directives are rejected and fall back to Sequential.
+  const std::vector<std::vector<Metadata *>> Bad = {
+      {Str("parallel")},                                   // no group
+      {Str("parallel"), Int(64, 0)},                       // not i32
+      {Str("parallel"), Int(32, 0), Int(32, 0)},           // extra operand
+      {Str("concurrent"), Int(32, 0)},                     // unknown kind
+      {Int(32, 0), Int(32, 0)},                            // kind not a string
+      {Str("sequential"), Int(32, 0), Int(32, 0)},         // no status
+      {Str("sequential"), Int(32, 0), Int(32, 0), Str("Sat")},    // bad name
+      {Str("sequential"), Int(32, 0), Int(32, 0), Str("Proven")}, // contradicts M(S)
+      {Str("sequential"), Int(32, 0), Str("0"), Str("Refuted")},  // slot not int
+  };
+  for (const auto &Ops : Bad) {
+    Set(Ops);
+    CHECK(!getScheduleDirective(*L));
+    CHECK(effectivePermission(*L) == SchedulePermission::Sequential);
+  }
+
+  CHECK(parseVCStatus("Timeout") == VCStatus::Timeout);
+  CHECK(parseVCStatus("Proven") == VCStatus::Proven);
+  CHECK(!parseVCStatus("Tout"));
+}
+
 } // namespace
 
 int main() {
@@ -392,6 +459,7 @@ int main() {
       {"verifyCompositionRule grid", testCompositionRuleGrid},
       {"translate/discharge", testTranslateDischarge},
       {"permissionFor (M(S))", testPermissionMapping},
+      {"getScheduleDirective reader", testScheduleDirectiveReader},
   };
 
   for (const auto &T : Tests) {

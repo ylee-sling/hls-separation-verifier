@@ -40,6 +40,7 @@ add_library(HLSSpatialVerify MODULE
   src/MemoryModel.cpp
   src/BankPredicate.cpp
   src/SMTTranslator.cpp
+  src/SchedulerSignal.cpp
   src/SpatialVerificationPass.cpp)
 
 set_target_properties(HLSSpatialVerify PROPERTIES
@@ -66,20 +67,21 @@ endif()
 #===-- Tests -------------------------------------------------------------===#
 enable_testing()
 
-# Unit tests are a separate executable that does link LLVM and Z3. The pass
-# driver (SpatialVerificationPass.cpp, which owns the cl::opts) is not part of
-# it; the tests exercise the three core modules directly.
+# Unit tests are a separate executable that does link LLVM and Z3, so the
+# plugin sources (and their cl::opts) are compiled into it exactly once.
 if(LLVM_LINK_LLVM_DYLIB)
   set(HLS_SV_LLVM_LIBS LLVM)
 else()
-  llvm_map_components_to_libnames(HLS_SV_LLVM_LIBS core support analysis)
+  llvm_map_components_to_libnames(HLS_SV_LLVM_LIBS core support analysis passes)
 endif()
 
 add_executable(HLSSVUnitTests
   tests/unit/UnitTests.cpp
   src/MemoryModel.cpp
   src/BankPredicate.cpp
-  src/SMTTranslator.cpp)
+  src/SMTTranslator.cpp
+  src/SchedulerSignal.cpp
+  src/SpatialVerificationPass.cpp)
 target_include_directories(HLSSVUnitTests PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_options(HLSSVUnitTests PRIVATE -fexceptions)

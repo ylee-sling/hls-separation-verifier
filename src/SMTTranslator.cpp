@@ -35,51 +35,6 @@ using namespace llvm;
 namespace hls_sv {
 
 //===----------------------------------------------------------------------===//
-// Status helpers and M(S)
-//===----------------------------------------------------------------------===//
-
-StringRef toString(VCStatus S) {
-  switch (S) {
-  case VCStatus::Proven:
-    return "Proven";
-  case VCStatus::Refuted:
-    return "Refuted";
-  case VCStatus::Unknown:
-    return "Unknown";
-  case VCStatus::Timeout:
-    return "Timeout";
-  }
-  llvm_unreachable("unknown VCStatus");
-}
-
-StringRef paperStatusName(VCStatus S) {
-  switch (S) {
-  case VCStatus::Proven:
-    return "Sat";
-  case VCStatus::Refuted:
-    return "Unsat";
-  case VCStatus::Unknown:
-    return "Unknown";
-  case VCStatus::Timeout:
-    return "Tout";
-  }
-  llvm_unreachable("unknown VCStatus");
-}
-
-StringRef toString(SchedulePermission P) {
-  return P == SchedulePermission::Parallel ? "Parallel" : "Sequential";
-}
-
-SchedulePermission permissionFor(VCStatus S) {
-  // M(S) ≜ Parallel   if S = Sat
-  //        Sequential if S ∈ {Unsat, Unknown, Tout}
-  // Treating Unknown/Tout like Unsat is what keeps the framework sound in the
-  // presence of non-linear arithmetic the oracle cannot settle.
-  return S == VCStatus::Proven ? SchedulePermission::Parallel
-                               : SchedulePermission::Sequential;
-}
-
-//===----------------------------------------------------------------------===//
 // SymbolicEvaluator
 //===----------------------------------------------------------------------===//
 

@@ -33,6 +33,7 @@
 
 #include "hls-sv/BankPredicate.h"
 #include "hls-sv/MemoryModel.h"
+#include "hls-sv/SchedulerSignal.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -59,27 +60,8 @@ class Type;
 
 namespace hls_sv {
 
-//===----------------------------------------------------------------------===//
-// Verification status S and permission mapping M(S)
-//===----------------------------------------------------------------------===//
-
-enum class VCStatus {
-  Proven,  ///< VC valid (paper: Sat). No two claims can share a bank.
-  Refuted, ///< VC falsifiable (paper: Unsat). Counterexample exists.
-  Unknown, ///< Solver gave up (e.g. incomplete tactic, internal error).
-  Timeout  ///< Deterministic resource budget exhausted (paper: T_out).
-};
-
-enum class SchedulePermission { Parallel, Sequential };
-
-llvm::StringRef toString(VCStatus S);
-/// The status name used in the paper (Sat / Unsat / Unknown / Tout).
-llvm::StringRef paperStatusName(VCStatus S);
-llvm::StringRef toString(SchedulePermission P);
-
-/// M(S): Parallel iff S = Sat (VC proven valid); every other outcome takes
-/// the conservative sequential fallback (MUX-driven stall logic).
-SchedulePermission permissionFor(VCStatus S);
+// VCStatus, SchedulePermission and the permission mapping M(S) live in
+// hls-sv/SchedulerSignal.h.
 
 struct TranslatorConfig {
   /// Z3 resource budget per check. Resource units are counted

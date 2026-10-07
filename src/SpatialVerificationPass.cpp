@@ -9,6 +9,7 @@
 #include "hls-sv/BankPredicate.h"
 #include "hls-sv/MemoryModel.h"
 #include "hls-sv/SMTTranslator.h"
+#include "hls-sv/SchedulerSignal.h"
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/MapVector.h"
@@ -767,6 +768,10 @@ llvmGetPassPluginInfo() {
                   if (Name == "hls-spatial-verify") {
                     FPM.addPass(RequireAnalysisPass<SpatialVerificationAnalysis,
                                                     Function>());
+                    return true;
+                  }
+                  if (Name == "hls-schedule-annotate") {
+                    FPM.addPass(ScheduleAnnotatePass());
                     return true;
                   }
                   return false;
