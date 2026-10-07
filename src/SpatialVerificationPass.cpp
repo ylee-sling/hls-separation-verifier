@@ -176,7 +176,11 @@ bool AccessCollector::decompose(const Value *Ptr, unsigned IdxW, FlatOffset &FO,
       }
       // LLVM's own GEP semantics give the flat offset; multi-dimensional
       // C/C++ subscripts were already lowered into this arithmetic.
+#if LLVM_VERSION_MAJOR >= 20
+      SmallMapVector<Value *, APInt, 4> Vars;
+#else
       MapVector<Value *, APInt> Vars;
+#endif
       APInt C(IdxW, 0);
       if (!GEP->collectOffset(DL, IdxW, Vars, C)) {
         Why = "getelementptr offset is not decomposable";
